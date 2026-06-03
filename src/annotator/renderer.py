@@ -346,9 +346,7 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
             target_start = ann.col_start - 1
             target_end = ann.col_end
             
-            target_y = None
-            target_x_start = None
-            target_x_end = None
+            target: tuple[float, float, float] | None = None
             
             for item in page_lines:
                 if item.source_line_num == target_line:
@@ -359,18 +357,20 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                         e_idx = min(target_end, item.char_end) - item.char_start
                         target_x_start = item.x + pdfmetrics.stringWidth(item.text[:s_idx], font_name, font_size)
                         target_x_end = item.x + pdfmetrics.stringWidth(item.text[:e_idx], font_name, font_size)
+                        target = (target_y, target_x_start, target_x_end)
                         break
                         
             # Fallback if start col is not in segments
-            if target_y is None:
+            if target is None:
                 for item in page_lines:
                     if item.source_line_num == target_line:
                         target_y = item.y
                         target_x_start = item.x
                         target_x_end = item.x + pdfmetrics.stringWidth(item.text, font_name, font_size)
+                        target = (target_y, target_x_start, target_x_end)
                         break
                         
-            if target_y is not None:
+            if target is not None:
                 c_lines = wrap_comment_text(ann.content, font_name, 8, box_width - 16)
                 b_height = len(c_lines) * 9.6 + 16 # 8pt top & bottom padding
                 
@@ -378,9 +378,9 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                     annotation=ann,
                     lines=c_lines,
                     height=b_height,
-                    target_y=target_y,
-                    target_x_start=target_x_start,
-                    target_x_end=target_x_end,
+                    target_y=target[0],
+                    target_x_start=target[1],
+                    target_x_end=target[2],
                     y_ideal=target_y + font_size / 2
                 ))
                 
