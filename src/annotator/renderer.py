@@ -36,6 +36,18 @@ class Segment:
     char_start: int
     char_end: int
 
+
+@dataclass
+class PageLine:
+    text: str
+    line_num_str: str
+    source_line_num: int
+    char_start: int
+    char_end: int
+    x: float
+    y: float
+    inline_annotations: list
+
 def ensure_font_loaded():
     """Ensure that the M PLUS 1 Code monospace CJK font is downloaded and registered."""
     cache_dir = get_cache_dir()
@@ -211,16 +223,16 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
             else:
                 line_num_str = " " * (line_num_width_chars + 2) if show_line_numbers else ""
                 
-            current_page_lines.append({
-                "text": seg.text,
-                "line_num_str": line_num_str,
-                "source_line_num": source_line_idx,
-                "char_start": seg.char_start,
-                "char_end": seg.char_end,
-                "x": text_x,
-                "y": current_y,
-                "inline_annotations": inline_anns if seg_idx == 0 else []
-            })
+            current_page_lines.append(PageLine(
+                text=seg.text,
+                line_num_str=line_num_str,
+                source_line_num=source_line_idx,
+                char_start=seg.char_start,
+                char_end=seg.char_end,
+                x=text_x,
+                y=current_y,
+                inline_annotations=(inline_anns if seg_idx == 0 else [])
+            ))
             current_y -= line_height
             
     if current_page_lines:
@@ -233,10 +245,10 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
     for page_idx, page_lines in enumerate(pages, 1):
         # Draw Highlights (under the text)
         for line_item in page_lines:
-            source_line = line_item["source_line_num"]
-            char_start = line_item["char_start"]
-            char_end = line_item["char_end"]
-            y = line_item["y"]
+            source_line = line_item.source_line_num
+            char_start = line_item.char_start
+            char_end = line_item.char_end
+            y = line_item.y
             
             # Find annotations that overlap with this segment
             for ann in annotations:
@@ -254,8 +266,8 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                     s_idx = overlap_start - char_start
                     e_idx = overlap_end - char_start
                     
-                    x_start = text_x + pdfmetrics.stringWidth(line_item["text"][:s_idx], font_name, font_size)
-                    x_end = text_x + pdfmetrics.stringWidth(line_item["text"][:e_idx], font_name, font_size)
+                    x_start = text_x + pdfmetrics.stringWidth(line_item.text[:s_idx], font_name, font_size)
+                    x_end = text_x + pdfmetrics.stringWidth(line_item.text[:e_idx], font_name, font_size)
                     
                     rect_x = x_start
                     rect_width = x_end - x_start
@@ -277,26 +289,26 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
         c.setFillColor(HexColor("#333333"))
         for line_item in page_lines:
             # Draw line number if config requires it
-            if show_line_numbers and line_item["line_num_str"].strip():
+            if show_line_numbers and line_item.line_num_str.strip():
                 c.saveState()
                 c.setFillColor(HexColor("#888888"))
-                c.drawString(margin_left, line_item["y"], line_item["line_num_str"])
+                c.drawString(margin_left, line_item.y, line_item.line_num_str)
                 c.restoreState()
-                
-            c.drawString(line_item["x"], line_item["y"], line_item["text"])
+
+            c.drawString(line_item.x, line_item.y, line_item.text)
             
         # Draw Inline Text Annotations (above target range)
         for line_item in page_lines:
-            for ann in line_item["inline_annotations"]:
+            for ann in line_item.inline_annotations:
                 target_start = ann.col_start - 1
                 target_end = ann.col_end
-                
+
                 # Find visual center of the range in the first segment
-                s_idx = min(max(target_start - line_item["char_start"], 0), len(line_item["text"]))
-                e_idx = min(max(target_end - line_item["char_start"], 0), len(line_item["text"]))
-                
-                x_start = text_x + pdfmetrics.stringWidth(line_item["text"][:s_idx], font_name, font_size)
-                x_end = text_x + pdfmetrics.stringWidth(line_item["text"][:e_idx], font_name, font_size)
+                s_idx = min(max(target_start - line_item.char_start, 0), len(line_item.text))
+                e_idx = min(max(target_end - line_item.char_start, 0), len(line_item.text))
+
+                x_start = text_x + pdfmetrics.stringWidth(line_item.text[:s_idx], font_name, font_size)
+                x_end = text_x + pdfmetrics.stringWidth(line_item.text[:e_idx], font_name, font_size)
                 
                 center_x = (x_start + x_end) / 2
                 comment_text = ann.content
@@ -308,7 +320,7 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                 # Center-align comment
                 text_w = pdfmetrics.stringWidth(comment_text, font_name, 7)
                 draw_x = max(center_x - text_w / 2, margin_left)
-                draw_y = line_item["y"] + font_size + 2
+                draw_y = line_item.y + font_size + 2
                 
                 c.drawString(draw_x, draw_y, comment_text)
                 c.restoreState()
@@ -318,7 +330,7 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
         for ann in annotations:
             if ann.type == "text" and ann.position == "margin":
                 # Check if the line of this annotation is rendered on this page
-                if any(item["source_line_num"] == ann.line for item in page_lines):
+                if any(item.source_line_num == ann.line for item in page_lines):
                     page_annotations.append(ann)
                     
         # Process and lay out right margin comments
@@ -337,23 +349,23 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
             target_x_end = None
             
             for item in page_lines:
-                if item["source_line_num"] == target_line:
+                if item.source_line_num == target_line:
                     # Prefer the segment containing the col_start
-                    if item["char_start"] <= target_start <= item["char_end"]:
-                        target_y = item["y"]
-                        s_idx = target_start - item["char_start"]
-                        e_idx = min(target_end, item["char_end"]) - item["char_start"]
-                        target_x_start = item["x"] + pdfmetrics.stringWidth(item["text"][:s_idx], font_name, font_size)
-                        target_x_end = item["x"] + pdfmetrics.stringWidth(item["text"][:e_idx], font_name, font_size)
+                    if item.char_start <= target_start <= item.char_end:
+                        target_y = item.y
+                        s_idx = target_start - item.char_start
+                        e_idx = min(target_end, item.char_end) - item.char_start
+                        target_x_start = item.x + pdfmetrics.stringWidth(item.text[:s_idx], font_name, font_size)
+                        target_x_end = item.x + pdfmetrics.stringWidth(item.text[:e_idx], font_name, font_size)
                         break
                         
             # Fallback if start col is not in segments
             if target_y is None:
                 for item in page_lines:
-                    if item["source_line_num"] == target_line:
-                        target_y = item["y"]
-                        target_x_start = item["x"]
-                        target_x_end = item["x"] + pdfmetrics.stringWidth(item["text"], font_name, font_size)
+                    if item.source_line_num == target_line:
+                        target_y = item.y
+                        target_x_start = item.x
+                        target_x_end = item.x + pdfmetrics.stringWidth(item.text, font_name, font_size)
                         break
                         
             if target_y is not None:
