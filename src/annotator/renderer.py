@@ -8,7 +8,7 @@ from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import letter, A4
 from dataclasses import dataclass
 
-from .config import RenderConfig
+from .config import RenderConfig, Annotation
 
 # Font Constants
 FONT_URL = "https://raw.githubusercontent.com/google/fonts/main/ofl/mplus1code/MPLUS1Code%5Bwght%5D.ttf"
@@ -47,6 +47,19 @@ class PageLine:
     x: float
     y: float
     inline_annotations: list
+
+
+@dataclass
+class MarginComment:
+    annotation: Annotation
+    lines: list[str]
+    height: float
+    target_y: float
+    target_x_start: float
+    target_x_end: float
+    y_ideal: float
+    y_top: float = 0.0
+    y_bottom: float = 0.0
 
 def ensure_font_loaded():
     """Ensure that the M PLUS 1 Code monospace CJK font is downloaded and registered."""
@@ -372,49 +385,49 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                 c_lines = wrap_comment_text(ann.content, font_name, 8, box_width - 16)
                 b_height = len(c_lines) * 9.6 + 16 # 8pt top & bottom padding
                 
-                comments_to_draw.append({
-                    "annotation": ann,
-                    "lines": c_lines,
-                    "height": b_height,
-                    "target_y": target_y,
-                    "target_x_start": target_x_start,
-                    "target_x_end": target_x_end,
-                    "y_ideal": target_y + font_size / 2
-                })
+                comments_to_draw.append(MarginComment(
+                    annotation=ann,
+                    lines=c_lines,
+                    height=b_height,
+                    target_y=target_y,
+                    target_x_start=target_x_start,
+                    target_x_end=target_x_end,
+                    y_ideal=target_y + font_size / 2
+                ))
                 
         # Collision avoidance for margin comment positioning
         if comments_to_draw:
             # Sort highest ideal y first (top of page down)
-            comments_to_draw.sort(key=lambda c: c["y_ideal"], reverse=True)
+            comments_to_draw.sort(key=lambda c: c.y_ideal, reverse=True)
             
             # Pass 1: Top-to-bottom push-down
             current_top = page_height - margin_top
             for item in comments_to_draw:
-                item_top = min(item["y_ideal"] + item["height"]/2, current_top)
-                item["y_top"] = item_top
-                item["y_bottom"] = item_top - item["height"]
-                current_top = item["y_bottom"] - 8 # 8pt spacing
+                item_top = min(item.y_ideal + item.height/2, current_top)
+                item.y_top = item_top
+                item.y_bottom = item_top - item.height
+                current_top = item.y_bottom - 8 # 8pt spacing
                 
             # Pass 2: Bottom-to-top push-up
-            if comments_to_draw[-1]["y_bottom"] < margin_bottom:
+            if comments_to_draw[-1].y_bottom < margin_bottom:
                 current_bottom = margin_bottom
                 for item in reversed(comments_to_draw):
-                    if item["y_bottom"] < current_bottom:
-                        diff = current_bottom - item["y_bottom"]
-                        item["y_bottom"] += diff
-                        item["y_top"] += diff
-                    current_bottom = item["y_top"] + 8
+                    if item.y_bottom < current_bottom:
+                        diff = current_bottom - item.y_bottom
+                        item.y_bottom += diff
+                        item.y_top += diff
+                    current_bottom = item.y_top + 8
                     
             # Draw comments and connector lines
             for item in comments_to_draw:
-                ann = item["annotation"]
+                ann = item.annotation
                 bg_color = ann.bg_color
                 border_color = ann.color
                 text_color = ann.color
                 
-                y_top = item["y_top"]
-                y_bottom = item["y_bottom"]
-                h = item["height"]
+                y_top = item.y_top
+                y_bottom = item.y_bottom
+                h = item.height
                 
                 c.saveState()
                 c.setLineWidth(0.75)
@@ -427,7 +440,7 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                 c.setFillColor(hex_to_color(text_color))
                 c.setFont(font_name, 8)
                 text_y = y_top - 8 - 6 # 8pt top padding + line baseline adjust
-                for cl in item["lines"]:
+                for cl in item.lines:
                     c.drawString(box_x + 8, text_y, cl)
                     text_y -= 9.6
                 c.restoreState()
@@ -437,8 +450,8 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                 c.setStrokeColor(hex_to_color(border_color))
                 c.setLineWidth(0.5)
                 # Line goes from right end of highlighted range to center-left of the callout card
-                cx1 = item["target_x_end"]
-                cy1 = item["target_y"] + font_size / 2
+                cx1 = item.target_x_end
+                cy1 = item.target_y + font_size / 2
                 cx2 = box_x
                 cy2 = (y_top + y_bottom) / 2
                 
