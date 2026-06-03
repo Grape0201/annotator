@@ -1,7 +1,7 @@
 import os
 import tempfile
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError
 
 app = FastAPI(title="Annotator API", description="API to generate annotated PDFs from text.")
