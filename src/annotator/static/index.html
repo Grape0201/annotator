@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Annotator - Live PDF Annotation Preview</title>
+    
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(17, 24, 39, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-focus: #6366f1;
+            --text-color: #f3f4f6;
+            --text-muted: #9ca3af;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --accent: #10b981;
+            --accent-hover: #059669;
+            --gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+            
+            /* Offline-friendly system font fallbacks */
+            --font-main: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Navigation Header */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 32px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 10;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--gradient);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+        }
+
+        .logo-text {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        /* Premium Buttons */
+        .btn {
+            font-family: var(--font-main);
+            font-weight: 500;
+            font-size: 14px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-primary {
+            background: var(--gradient);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--text-muted);
+        }
+
+        /* Main Workspace Container */
+        .workspace {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 65px);
+            position: relative;
+        }
+
+        /* Left Editor Panel */
+        .editor-panel {
+            width: 45%;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            background: var(--panel-bg);
+            backdrop-filter: blur(8px);
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(10, 15, 30, 0.5);
+            padding: 0 16px;
+        }
+
+        .tab {
+            padding: 16px 24px;
+            color: var(--text-muted);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .tab:hover {
+            color: var(--text-color);
+        }
+
+        .tab.active {
+            color: #a855f7;
+            border-bottom-color: #a855f7;
+        }
+
+        .editor-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .editor-pane {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+        }
+
+        .editor-pane.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .editor-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .textarea-wrapper {
+            flex: 1;
+            position: relative;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: rgba(15, 23, 42, 0.9);
+            overflow: hidden;
+            transition: border-color 0.2s ease;
+        }
+
+        .textarea-wrapper:focus-within {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.3);
+        }
+
+        .code-textarea {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #e5e7eb;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            line-height: 1.5;
+            padding: 16px;
+            resize: none;
+            tab-size: 4;
+        }
+
+        /* Right Preview Panel */
+        .preview-panel {
+            width: 55%;
+            background: #111827;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .preview-header {
+            padding: 16px 24px;
+            background: rgba(15, 23, 42, 0.8);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .preview-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge-live {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        .preview-container {
+            flex: 1;
+            position: relative;
+            background: #1f2937;
+        }
+
+        .preview-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #1f2937;
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(99, 102, 241, 0.1);
+            border-top: 3px solid var(--border-focus);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Status Toast Alert */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            background: #10b981;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 1000;
+        }
+
+        .toast.error {
+            background: #ef4444;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Navigation -->
+    <header>
+        <div class="logo">
+            <div class="logo-icon">A</div>
+            <div class="logo-text">Annotator</div>
+        </div>
+        <div class="actions">
+            <button class="btn btn-secondary" onclick="loadDefaultTemplate()">テンプレート読込</button>
+            <button class="btn btn-primary" onclick="generatePDF()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                手動更新
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Editor & Preview Workspace -->
+    <div class="workspace">
+        <!-- Editor Panel -->
+        <div class="editor-panel">
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('text')">1. ソーステキスト</div>
+                <div class="tab" onclick="switchTab('yaml')">2. アノテーション (YAML)</div>
+            </div>
+            
+            <div class="editor-container">
+                <!-- Text Editor Pane -->
+                <div id="text-pane" class="editor-pane active">
+                    <div class="editor-label">
+                        <span>Source text file content</span>
+                        <span>UTF-8 Monospace (Live Auto-render)</span>
+                    </div>
+                    <div class="textarea-wrapper">
+                        <textarea id="source-text-editor" class="code-textarea" placeholder="テキストをここに入力してください..."></textarea>
+                    </div>
+                </div>
+                
+                <!-- YAML Editor Pane -->
+                <div id="yaml-pane" class="editor-pane">
+                    <div class="editor-label">
+                        <span>YAML config & annotation layout</span>
+                        <span>YAML Schema (Live Auto-render)</span>
+                    </div>
+                    <div class="textarea-wrapper">
+                        <textarea id="yaml-editor" class="code-textarea" placeholder="annotation.yaml をここに入力してください..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Live PDF Preview Panel -->
+        <div class="preview-panel">
+            <div class="preview-header">
+                <div class="preview-title">
+                    <span>PDF Preview Pane</span>
+                    <span class="badge-live">Live</span>
+                </div>
+            </div>
+            <div class="preview-container">
+                <!-- Loading HUD -->
+                <div id="loading" class="loading-overlay">
+                    <div class="spinner"></div>
+                    <span style="font-size: 14px; color: var(--text-muted);">PDFをレンダリング中...</span>
+                </div>
+                <!-- PDF Frame -->
+                <iframe id="pdf-preview" class="preview-frame" src="about:blank"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Toast Notification -->
+    <div id="toast" class="toast">Successfully generated PDF</div>
+
+    <script>
+        // Setup initial default templates
+        const defaultSourceText = `# annotator demo file
+このプロジェクトはテキストファイルとアノテーション指定用のYAMLファイルを元に、
+日本語対応したPDFファイルを軽量かつズレのないレイアウトで生成するプログラムです。
+
+アノテーションは以下の3タイプをサポートしています。
+1. ハイライト (文字列の背景を半透明で塗る)
+2. マージン注記 (右余白に吹き出しを配置し、対象箇所と細い実線で結ぶ)
+3. インライン注記 (対象文字列の真上に行間を広げて小さな文字で表示する)
+
+以下は適当なダミーテキストデータです。
+2026/06/03 08:32:00 [INFO] Starting Annotator application server.
+2026/06/03 08:32:01 [WARN] No database configured. Using in-memory sqlite store.
+2026/06/03 08:32:02 [ERROR] Fail to write debug log to disk: Permission Denied.
+2026/06/03 08:32:05 [INFO] Server started successfully on port 8000.
+
+行番号表示や、ヘッダーのファイル名表示、フッターのページ番号表示なども
+YAMLの settings パラメータから簡単に切り替えることができます。
+`;
+
+        const defaultYaml = `settings:
+  page_size: A4
+  orientation: portrait
+  font_size: 9.5
+  line_spacing: 1.4
+  margin:
+    top: 50
+    bottom: 50
+    left: 45
+    right: 190
+  show_line_numbers: true
+  show_filename: true
+  show_page_numbers: true
+
+annotations:
+  # テキスト内の特定の日本語フレーズをハイライト
+  - line: 2
+    col_start: 11
+    col_end: 27
+    type: highlight
+    color: "#6366f1"
+    opacity: 0.25
+
+  # マージン注記の例 (右の余白に線付きで表示されます)
+  - line: 11
+    col_start: 22
+    col_end: 26
+    type: text
+    content: "データベース未設定時のフォールバック警告"
+    position: margin
+    color: "#D97706"
+    bg_color: "#FEF3C7"
+
+  # エラーログ箇所のマージン注記
+  - line: 12
+    col_start: 23
+    col_end: 63
+    type: text
+    content: "重要: パーミッションエラーの解決が必要です！"
+    position: margin
+    color: "#DC2626"
+    bg_color: "#FEE2E2"
+
+  # インライン注記の例 (行間に青い文字で表示されます)
+  - line: 13
+    col_start: 35
+    col_end: 44
+    type: text
+    content: "Port 8000 bound"
+    position: inline
+    color: "#2563EB"
+`;
+
+        // Debounce helper to prevent flooding backend server on keypress
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        }
+
+        // Live automatic preview generation (triggered 600ms after user stops typing)
+        const debouncedGenerate = debounce(generatePDF, 600);
+
+        // Editor setup on load
+        window.onload = function() {
+            document.getElementById("source-text-editor").value = defaultSourceText;
+            document.getElementById("yaml-editor").value = defaultYaml;
+            
+            // Auto generate PDF on load
+            generatePDF();
+            
+            // Add tab key support inside editors
+            enableTabKey("source-text-editor");
+            enableTabKey("yaml-editor");
+
+            // Attach debounced auto-generation to inputs
+            document.getElementById("source-text-editor").addEventListener("input", debouncedGenerate);
+            document.getElementById("yaml-editor").addEventListener("input", debouncedGenerate);
+        };
+
+        // Enable Tab indentation inside Textareas
+        function enableTabKey(id) {
+            const textarea = document.getElementById(id);
+            textarea.addEventListener("keydown", function(e) {
+                if (e.key === "Tab") {
+                    e.preventDefault();
+                    const start = this.selectionStart;
+                    const end = this.selectionEnd;
+                    
+                    // Set textarea value to: text before caret + tab + text after caret
+                    this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
+                    
+                    // Put caret at right position
+                    this.selectionStart = this.selectionEnd = start + 4;
+                    // Trigger input event to invoke auto-generation
+                    this.dispatchEvent(new Event("input"));
+                }
+            });
+        }
+
+        // Tab Switching Logic
+        function switchTab(tabName) {
+            document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+            document.querySelectorAll(".editor-pane").forEach(p => p.classList.remove("active"));
+            
+            if (tabName === "text") {
+                event.target.classList.add("active");
+                document.getElementById("text-pane").classList.add("active");
+            } else if (tabName === "yaml") {
+                event.target.classList.add("active");
+                document.getElementById("yaml-pane").classList.add("active");
+            }
+        }
+
+        // Load Defaults
+        function loadDefaultTemplate() {
+            if (confirm("エディタの内容をデフォルトのテンプレートで上書きしますか？")) {
+                document.getElementById("source-text-editor").value = defaultSourceText;
+                document.getElementById("yaml-editor").value = defaultYaml;
+                generatePDF();
+                showToast("テンプレートをロードしました。");
+            }
+        }
+
+        // Toast Alert helper
+        function showToast(message, isError = false) {
+            const toast = document.getElementById("toast");
+            toast.textContent = message;
+            toast.className = "toast";
+            if (isError) {
+                toast.classList.add("error");
+            }
+            toast.classList.add("show");
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 4000);
+        }
+
+        // AJAX call to POST /api/render to fetch generated PDF blob
+        function generatePDF() {
+            const textValue = document.getElementById("source-text-editor").value;
+            const yamlValue = document.getElementById("yaml-editor").value;
+            
+            // Show Loading spinner
+            const loading = document.getElementById("loading");
+            loading.classList.add("active");
+            
+            // Perform API request, passing raw YAML config to server
+            fetch("/api/render", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    text: textValue,
+                    config_yaml: yamlValue,
+                    filename: "demo_source.txt"
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(errData => {
+                        throw new Error(errData.detail || "PDFの生成中にエラーが発生しました。");
+                    });
+                }
+                return response.blob();
+            })
+            .then(pdfBlob => {
+                // Create object URL for the PDF blob and load inside iframe
+                const blobUrl = URL.createObjectURL(pdfBlob);
+                const iframe = document.getElementById("pdf-preview");
+                iframe.src = blobUrl;
+                
+                showToast("PDFを自動生成しました！");
+            })
+            .catch(err => {
+                showToast("エラー: " + err.message, true);
+                console.error(err);
+            })
+            .finally(() => {
+                // Hide Loading spinner
+                loading.classList.remove("active");
+            });
+        }
+    </script>
+</body>
+</html>

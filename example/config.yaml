@@ -1,0 +1,59 @@
+settings:
+  page_size: A4
+  orientation: portrait
+  font_size: 10
+  line_spacing: 1.4
+  margin:
+    top: 50
+    bottom: 50
+    left: 50
+    right: 180
+  show_line_numbers: true
+  show_filename: true
+  show_page_numbers: true
+
+annotations:
+  # 日本語動作確認のハイライト
+  - line: 2
+    col_start: 27
+    col_end: 34
+    type: highlight
+    color: "#3182CE"
+    opacity: 0.3
+
+  # 「ハイライトされる予定」をハイライト
+  - line: 10
+    col_start: 9
+    col_end: 20
+    type: highlight
+    color: "#FFD700"
+    opacity: 0.4
+
+  # 「右マージンに注記」をマージン注記
+  - line: 11
+    col_start: 9
+    col_end: 18
+    type: text
+    content: "これは右マージンに表示される吹き出しアノテーションです。日本語の折り返しが正常に行われるか確認します。"
+    position: margin
+    color: "#E53E3E"
+    bg_color: "#FFF5F5"
+
+  # 「inline 注記」をインライン注記
+  - line: 12
+    col_start: 9
+    col_end: 19
+    type: text
+    content: "Inline comment above text"
+    position: inline
+    color: "#10B981"
+
+  # エラー箇所のマージン注記
+  - line: 23
+    col_start: 26
+    col_end: 56
+    type: text
+    content: "タイムアウトエラーが発生。ネットワーク設定と接続先サーバーのステータスを確認してください。"
+    position: margin
+    color: "#B91C1C"
+    bg_color: "#FEF2F2"
