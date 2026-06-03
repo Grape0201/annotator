@@ -25,5 +25,11 @@ build-backend = "setuptools.build_meta"
 packages = ["annotator"]
 package-dir = {"" = "src"}
 
+[dependency-groups]
+dev = [
+    "ruff>=0.15.15",
+    "ty>=0.0.42",
+]
+
 
 

@@ -1,6 +1,7 @@
 import os
 import yaml
 import click
+from pydantic import ValidationError
 
 @click.group()
 def main():
@@ -14,6 +15,7 @@ def main():
 def render(input_file, config, output):
     """Render a text file as a PDF with annotations."""
     from .renderer import render_pdf
+    from .config import RenderConfig
     
     # Read input file
     with open(input_file, 'r', encoding='utf-8') as f:
@@ -24,6 +26,11 @@ def render(input_file, config, output):
     if config:
         with open(config, 'r', encoding='utf-8') as f:
             config_data = yaml.safe_load(f) or {}
+
+    try:
+        config_data = RenderConfig.model_validate(config_data)
+    except ValidationError as exc:
+        raise click.ClickException(f"Configuration validation failed:\n{exc}")
             
     filename = os.path.basename(input_file)
     render_pdf(source_text, config_data, output, filename)

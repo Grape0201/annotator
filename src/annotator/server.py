@@ -1,9 +1,8 @@
 import os
 import tempfile
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, HTTPException
+from pydantic import BaseModel, Field, ValidationError
 
 app = FastAPI(title="Annotator API", description="API to generate annotated PDFs from text.")
 
@@ -11,7 +10,7 @@ app = FastAPI(title="Annotator API", description="API to generate annotated PDFs
 class RenderRequest(BaseModel):
     text: str = Field(..., description="The plain text content to render.")
     config_yaml: str = Field(default="", description="Annotation settings and items in raw YAML string format.")
-    filename: Optional[str] = Field("document.txt", description="Name of the file shown in the header.")
+    filename: str | None = Field("document.txt", description="Name of the file shown in the header.")
 
 # Path for static assets
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -22,6 +21,7 @@ def render_api(request: RenderRequest):
     Generate an annotated PDF from plain text and configuration.
     Returns the binary PDF file.
     """
+    from .config import RenderConfig
     from .renderer import render_pdf
     import yaml
     
@@ -30,6 +30,11 @@ def render_api(request: RenderRequest):
         config_data = yaml.safe_load(request.config_yaml) or {}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"YAML syntax error: {str(e)}")
+
+    try:
+        config_data = RenderConfig.model_validate(config_data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=f"Configuration validation failed: {exc}")
     
     # Create a temporary file to hold the output PDF
     temp_dir = tempfile.gettempdir()
@@ -62,7 +67,7 @@ def render_api(request: RenderRequest):
         if os.path.exists(temp_pdf_path):
             try:
                 os.remove(temp_pdf_path)
-            except:
+            except:  # noqa: E722
                 pass
         raise HTTPException(status_code=500, detail=f"PDF Generation failed: {str(e)}")
 

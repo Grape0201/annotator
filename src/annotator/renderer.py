@@ -1,5 +1,4 @@
 import os
-import yaml
 import urllib.request
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
@@ -7,6 +6,8 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import letter, A4
+
+from .config import RenderConfig
 
 # Font Constants
 FONT_URL = "https://raw.githubusercontent.com/google/fonts/main/ofl/mplus1code/MPLUS1Code%5Bwght%5D.ttf"
@@ -36,7 +37,7 @@ def ensure_font_loaded():
     # Try downloading if not exists
     if not os.path.exists(font_path):
         try:
-            print(f"Downloading monospace CJK font (M PLUS 1 Code) from Google Fonts...")
+            print("Downloading monospace CJK font (M PLUS 1 Code) from Google Fonts...")
             urllib.request.urlretrieve(FONT_URL, font_path)
             print("Download complete!")
         except Exception as e:
@@ -44,7 +45,7 @@ def ensure_font_loaded():
             if os.path.exists(font_path):
                 try:
                     os.remove(font_path)
-                except:
+                except:  # noqa: E722
                     pass
             return None
             
@@ -57,13 +58,13 @@ def ensure_font_loaded():
         return None
 
 
-def hex_to_color(hex_str, default="#000000"):
+def hex_to_color(hex_str: str, default="#000000"):
     try:
         return HexColor(hex_str)
     except Exception:
         return HexColor(default)
 
-def wrap_comment_text(text, font_name, font_size, max_width):
+def wrap_comment_text(text: str, font_name: str, font_size: int | float, max_width: int | float):
     """Wrap comment text to fit within max_width. Handles Japanese char-by-char wrapping."""
     words = text.split()
     # Check if it looks like CJK text (no spaces, containing high code points)
@@ -96,7 +97,7 @@ def wrap_comment_text(text, font_name, font_size, max_width):
             lines.append(current_line)
         return lines
 
-def wrap_line(line_text, font_name, font_size, max_text_width):
+def wrap_line(line_text: str, font_name: str, font_size: int | float, max_text_width: int | float):
     """Wrap a single source line to fit max_text_width."""
     segments = []
     current_segment = ""
@@ -127,7 +128,7 @@ def wrap_line(line_text, font_name, font_size, max_text_width):
     })
     return segments
 
-def render_pdf(source_text: str, config_data: dict, output_path: str, filename: str = "source.txt"):
+def render_pdf(source_text: str, config: RenderConfig, output_path: str, filename: str = "source.txt"):
     """
     Renders source text as a monospace PDF with annotations applied.
     """
@@ -135,21 +136,20 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
     source_text = source_text.replace('\t', '    ')
     
     # 1. Parse settings & merge with defaults
-    settings = config_data.get("settings", {})
-    page_size_str = settings.get("page_size", "A4").upper()
-    orientation = settings.get("orientation", "portrait").lower()
-    font_size = settings.get("font_size", 9)
-    line_spacing = settings.get("line_spacing", 1.3)
+    settings = config.settings
+    page_size_str = settings.page_size
+    orientation = settings.orientation
+    font_size = settings.font_size
+    line_spacing = settings.line_spacing
     
-    margin_config = settings.get("margin", {})
-    margin_top = margin_config.get("top", 50)
-    margin_bottom = margin_config.get("bottom", 50)
-    margin_left = margin_config.get("left", 50)
-    margin_right = margin_config.get("right", 180)
+    margin_top = settings.margin.top
+    margin_bottom = settings.margin.bottom
+    margin_left = settings.margin.left
+    margin_right = settings.margin.right
     
-    show_line_numbers = settings.get("show_line_numbers", True)
-    show_filename = settings.get("show_filename", True)
-    show_page_numbers = settings.get("show_page_numbers", True)
+    show_line_numbers = settings.show_line_numbers
+    show_filename = settings.show_filename
+    show_page_numbers = settings.show_page_numbers
     
     # Page dimensions setup
     base_size = A4 if page_size_str == "A4" else letter
@@ -177,7 +177,7 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
     max_text_width = page_width - margin_left - margin_right - line_num_width
     
     # Gather annotations
-    annotations = config_data.get("annotations", [])
+    annotations = config.annotations
     
     # 2. Layout execution phase
     pages = []
@@ -187,7 +187,7 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
     for source_line_idx, line_content in enumerate(source_lines, 1):
         # Check if this line has any inline annotations.
         # If it does, we add extra spacing BEFORE the line to make room for inline text comments.
-        inline_anns = [a for a in annotations if a.get("line") == source_line_idx and a.get("type") == "text" and a.get("position") == "inline"]
+        inline_anns = [a for a in annotations if a.line == source_line_idx and a.type == "text" and a.position == "inline"]
         if inline_anns:
             # Shift down to reserve 10 points space for the inline text comment
             current_y -= (8 * len(inline_anns) + 4)
@@ -237,11 +237,11 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
             
             # Find annotations that overlap with this segment
             for ann in annotations:
-                if ann.get("line") != source_line:
+                if ann.line != source_line:
                     continue
                     
-                target_start = ann.get("col_start", 1) - 1
-                target_end = ann.get("col_end", 1)
+                target_start = ann.col_start - 1
+                target_end = ann.col_end
                 
                 # Check character overlap
                 overlap_start = max(target_start, char_start)
@@ -260,8 +260,8 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
                     rect_height = font_size * line_spacing
                     
                     # Highlight style defaults
-                    color_hex = ann.get("color", "#FFD700")
-                    opacity = ann.get("opacity", 0.4)
+                    color_hex = ann.color
+                    opacity = ann.opacity
                     
                     c.saveState()
                     c.setFillColor(hex_to_color(color_hex))
@@ -285,8 +285,8 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
         # Draw Inline Text Annotations (above target range)
         for line_item in page_lines:
             for ann in line_item["inline_annotations"]:
-                target_start = ann.get("col_start", 1) - 1
-                target_end = ann.get("col_end", 1)
+                target_start = ann.col_start - 1
+                target_end = ann.col_end
                 
                 # Find visual center of the range in the first segment
                 s_idx = min(max(target_start - line_item["char_start"], 0), len(line_item["text"]))
@@ -296,11 +296,11 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
                 x_end = text_x + pdfmetrics.stringWidth(line_item["text"][:e_idx], font_name, font_size)
                 
                 center_x = (x_start + x_end) / 2
-                comment_text = ann.get("content", "")
+                comment_text = ann.content
                 
                 c.saveState()
                 c.setFont(font_name, 7)
-                c.setFillColor(hex_to_color(ann.get("color", "#3182CE")))
+                c.setFillColor(hex_to_color(ann.color))
                 
                 # Center-align comment
                 text_w = pdfmetrics.stringWidth(comment_text, font_name, 7)
@@ -313,9 +313,9 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
         # Draw Right Margin Callouts
         page_annotations = []
         for ann in annotations:
-            if ann.get("type") == "text" and ann.get("position", "margin") == "margin":
+            if ann.type == "text" and ann.position == "margin":
                 # Check if the line of this annotation is rendered on this page
-                if any(item["source_line_num"] == ann.get("line") for item in page_lines):
+                if any(item["source_line_num"] == ann.line for item in page_lines):
                     page_annotations.append(ann)
                     
         # Process and lay out right margin comments
@@ -325,9 +325,9 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
         comments_to_draw = []
         for ann in page_annotations:
             # Find exact position of the annotation target in page lines
-            target_line = ann.get("line")
-            target_start = ann.get("col_start", 1) - 1
-            target_end = ann.get("col_end", 1)
+            target_line = ann.line
+            target_start = ann.col_start - 1
+            target_end = ann.col_end
             
             target_y = None
             target_x_start = None
@@ -354,7 +354,7 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
                         break
                         
             if target_y is not None:
-                c_lines = wrap_comment_text(ann.get("content", ""), font_name, 8, box_width - 16)
+                c_lines = wrap_comment_text(ann.content, font_name, 8, box_width - 16)
                 b_height = len(c_lines) * 9.6 + 16 # 8pt top & bottom padding
                 
                 comments_to_draw.append({
@@ -393,9 +393,9 @@ def render_pdf(source_text: str, config_data: dict, output_path: str, filename: 
             # Draw comments and connector lines
             for item in comments_to_draw:
                 ann = item["annotation"]
-                bg_color = ann.get("bg_color", "#FFF5F5")
-                border_color = ann.get("color", "#E53E3E")
-                text_color = ann.get("color", "#E53E3E")
+                bg_color = ann.bg_color
+                border_color = ann.color
+                text_color = ann.color
                 
                 y_top = item["y_top"]
                 y_bottom = item["y_bottom"]
