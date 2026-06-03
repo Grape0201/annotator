@@ -4,7 +4,7 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.lib.colors import HexColor
+from reportlab.lib.colors import HexColor, Color
 from reportlab.lib.pagesizes import letter, A4
 from dataclasses import dataclass
 
@@ -61,7 +61,7 @@ class MarginComment:
     y_top: float = 0.0
     y_bottom: float = 0.0
 
-def ensure_font_loaded():
+def ensure_font_loaded() -> str | None:
     """Ensure that the M PLUS 1 Code monospace CJK font is downloaded and registered."""
     cache_dir = get_cache_dir()
     os.makedirs(cache_dir, exist_ok=True)
@@ -91,13 +91,13 @@ def ensure_font_loaded():
         return None
 
 
-def hex_to_color(hex_str: str, default="#000000"):
+def hex_to_color(hex_str: str, default="#000000") -> Color:
     try:
         return HexColor(hex_str)
     except Exception:
         return HexColor(default)
 
-def wrap_comment_text(text: str, font_name: str, font_size: int | float, max_width: int | float):
+def wrap_comment_text(text: str, font_name: str, font_size: int | float, max_width: int | float) -> list[str]:
     """Wrap comment text to fit within max_width. Handles Japanese char-by-char wrapping."""
     words = text.split()
     # Check if it looks like CJK text (no spaces, containing high code points)
