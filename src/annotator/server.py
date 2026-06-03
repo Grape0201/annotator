@@ -28,13 +28,12 @@ def render_api(request: RenderRequest):
     # Parse YAML configuration server-side to allow offline client execution without js-yaml
     try:
         config_data = yaml.safe_load(request.config_yaml) or {}
+        config = RenderConfig.model_validate(config_data)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"YAML syntax error: {str(e)}")
-
-    try:
-        config_data = RenderConfig.model_validate(config_data)
     except ValidationError as exc:
         raise HTTPException(status_code=400, detail=f"Configuration validation failed: {exc}")
+
     
     # Create a temporary file to hold the output PDF
     temp_dir = tempfile.gettempdir()
@@ -44,9 +43,9 @@ def render_api(request: RenderRequest):
         # Call the renderer
         render_pdf(
             source_text=request.text,
-            config_data=config_data,
+            config=config,
             output_path=temp_pdf_path,
-            filename=request.filename
+            filename=request.filename if request.filename else "output.pdf"
         )
         
         # Return FileResponse. Standard FastAPI FileResponse doesn't delete the file automatically.
