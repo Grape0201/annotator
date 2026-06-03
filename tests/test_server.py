@@ -2,7 +2,6 @@
 
 import os
 
-import pytest
 from fastapi.testclient import TestClient
 
 from annotator.server import app
