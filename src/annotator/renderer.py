@@ -164,30 +164,19 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
     source_text = source_text.replace('\t', '    ')
     
     # 1. Parse settings & merge with defaults
-    settings = config.settings
-    page_size_str = settings.page_size
-    orientation = settings.orientation
-    font_size = settings.font_size
-    line_spacing = settings.line_spacing
-    
-    margin_top = settings.margin.top
-    margin_bottom = settings.margin.bottom
-    margin_left = settings.margin.left
-    margin_right = settings.margin.right
-    
-    show_line_numbers = settings.show_line_numbers
-    show_filename = settings.show_filename
-    show_page_numbers = settings.show_page_numbers
+    s = config.settings
+    font_size = s.font_size
+    margin = s.margin
     
     # Page dimensions setup
-    base_size = A4 if page_size_str == "A4" else letter
-    if orientation == "landscape":
+    base_size = A4 if s.page_size == "A4" else letter
+    if s.orientation == "landscape":
         page_width, page_height = base_size[1], base_size[0]
     else:
         page_width, page_height = base_size[0], base_size[1]
         
     font_name = ensure_font_loaded() or DEFAULT_CID_FONT
-    line_height = font_size * line_spacing
+    line_height = font_size * s.line_spacing
     
     # Parse source lines
     source_lines = source_text.splitlines()
@@ -195,14 +184,14 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
     
     # Calculate line numbers column width
     line_num_width_chars = len(str(total_lines))
-    if show_line_numbers:
+    if s.show_line_numbers:
         line_num_prefix_example = "0" * line_num_width_chars + ": "
         line_num_width = pdfmetrics.stringWidth(line_num_prefix_example, font_name, font_size) + 5
     else:
         line_num_width = 0
         
-    text_x = margin_left + line_num_width
-    max_text_width = page_width - margin_left - margin_right - line_num_width
+    text_x = margin.left + line_num_width
+    max_text_width = page_width - margin.left - margin.right - line_num_width
     
     # Gather annotations
     annotations = config.annotations
@@ -210,7 +199,7 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
     # 2. Layout execution phase
     pages = []
     current_page_lines = []
-    current_y = page_height - margin_top - font_size
+    current_y = page_height - margin.top - font_size
     
     for source_line_idx, line_content in enumerate(source_lines, 1):
         # Check if this line has any inline annotations.
@@ -223,18 +212,18 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
         segments = wrap_line(line_content, font_name, font_size, max_text_width)
         for seg_idx, seg in enumerate(segments):
             # Check page overflow
-            if current_y < margin_bottom:
+            if current_y < margin.bottom:
                 pages.append(current_page_lines)
                 current_page_lines = []
-                current_y = page_height - margin_top - font_size
+                current_y = page_height - margin.top - font_size
                 # If overflow occurred and we shifted for inline annotations, apply spacing on new page too if line starts
                 if seg_idx == 0 and inline_anns:
                     current_y -= (8 * len(inline_anns) + 4)
                     
-            if seg_idx == 0 and show_line_numbers:
+            if seg_idx == 0 and s.show_line_numbers:
                 line_num_str = f"{source_line_idx:>{line_num_width_chars}}: "
             else:
-                line_num_str = " " * (line_num_width_chars + 2) if show_line_numbers else ""
+                line_num_str = " " * (line_num_width_chars + 2) if s.show_line_numbers else ""
                 
             current_page_lines.append(PageLine(
                 text=seg.text,
@@ -284,8 +273,8 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                     
                     rect_x = x_start
                     rect_width = x_end - x_start
-                    rect_y = y - (font_size * (line_spacing - 1) / 2)
-                    rect_height = font_size * line_spacing
+                    rect_y = y - (font_size * (s.line_spacing - 1) / 2)
+                    rect_height = font_size * s.line_spacing
                     
                     # Highlight style defaults
                     color_hex = ann.color
@@ -302,10 +291,10 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
         c.setFillColor(HexColor("#333333"))
         for line_item in page_lines:
             # Draw line number if config requires it
-            if show_line_numbers and line_item.line_num_str.strip():
+            if s.show_line_numbers and line_item.line_num_str.strip():
                 c.saveState()
                 c.setFillColor(HexColor("#888888"))
-                c.drawString(margin_left, line_item.y, line_item.line_num_str)
+                c.drawString(margin.left, line_item.y, line_item.line_num_str)
                 c.restoreState()
 
             c.drawString(line_item.x, line_item.y, line_item.text)
@@ -332,7 +321,7 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                 
                 # Center-align comment
                 text_w = pdfmetrics.stringWidth(comment_text, font_name, 7)
-                draw_x = max(center_x - text_w / 2, margin_left)
+                draw_x = max(center_x - text_w / 2, margin.left)
                 draw_y = line_item.y + font_size + 2
                 
                 c.drawString(draw_x, draw_y, comment_text)
@@ -347,8 +336,8 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                     page_annotations.append(ann)
                     
         # Process and lay out right margin comments
-        box_width = margin_right - 30
-        box_x = page_width - margin_right + 15
+        box_width = margin.right - 30
+        box_x = page_width - margin.right + 15
         
         comments_to_draw = []
         for ann in page_annotations:
@@ -401,7 +390,7 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
             comments_to_draw.sort(key=lambda c: c.y_ideal, reverse=True)
             
             # Pass 1: Top-to-bottom push-down
-            current_top = page_height - margin_top
+            current_top = page_height - margin.top
             for item in comments_to_draw:
                 item_top = min(item.y_ideal + item.height/2, current_top)
                 item.y_top = item_top
@@ -409,8 +398,8 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                 current_top = item.y_bottom - 8 # 8pt spacing
                 
             # Pass 2: Bottom-to-top push-up
-            if comments_to_draw[-1].y_bottom < margin_bottom:
-                current_bottom = margin_bottom
+            if comments_to_draw[-1].y_bottom < margin.bottom:
+                current_bottom = margin.bottom
                 for item in reversed(comments_to_draw):
                     if item.y_bottom < current_bottom:
                         diff = current_bottom - item.y_bottom
@@ -462,30 +451,30 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                 c.restoreState()
 
         # Draw Header
-        if show_filename:
+        if s.show_filename:
             c.saveState()
             c.setFont(font_name, 8)
             c.setFillColor(HexColor("#888888"))
-            c.drawString(margin_left, page_height - margin_top + 15, filename)
+            c.drawString(margin.left, page_height - margin.top + 15, filename)
             # Draw line divider
             c.setStrokeColor(HexColor("#DDDDDD"))
             c.setLineWidth(0.5)
-            c.line(margin_left, page_height - margin_top + 10, page_width - margin_left, page_height - margin_top + 10)
+            c.line(margin.left, page_height - margin.top + 10, page_width - margin.left, page_height - margin.top + 10)
             c.restoreState()
             
         # Draw Footer
-        if show_page_numbers:
+        if s.show_page_numbers:
             c.saveState()
             c.setFont(font_name, 8)
             c.setFillColor(HexColor("#888888"))
             page_str = f"{page_idx} / {total_pages}"
             # Right align page number
             text_w = pdfmetrics.stringWidth(page_str, font_name, 8)
-            c.drawString(page_width - margin_left - text_w, margin_bottom - 20, page_str)
+            c.drawString(page_width - margin.left - text_w, margin.bottom - 20, page_str)
             # Draw divider line
             c.setStrokeColor(HexColor("#DDDDDD"))
             c.setLineWidth(0.5)
-            c.line(margin_left, margin_bottom - 10, page_width - margin_left, margin_bottom - 10)
+            c.line(margin.left, margin.bottom - 10, page_width - margin.left, margin.bottom - 10)
             c.restoreState()
             
         c.showPage()
