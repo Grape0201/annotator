@@ -36,8 +36,8 @@ def render_api(request: RenderRequest):
 
     
     # Create a temporary file to hold the output PDF
-    temp_dir = tempfile.gettempdir()
-    temp_pdf_path = os.path.join(temp_dir, next(tempfile._get_candidate_names()) + ".pdf")
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        temp_pdf_path = tmp.name
     
     try:
         # Call the renderer
