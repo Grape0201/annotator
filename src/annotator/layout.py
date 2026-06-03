@@ -8,6 +8,13 @@ from .config import Annotation, RenderConfig, Settings
 
 @dataclass
 class Segment:
+    """Represents a wrapped text segment within a source line.
+    
+    Attributes:
+        text: The text content of this segment.
+        char_start: Starting character index in the original source line.
+        char_end: Ending character index in the original source line.
+    """
     text: str
     char_start: int
     char_end: int
@@ -15,6 +22,17 @@ class Segment:
 
 @dataclass
 class PageLine:
+    """Represents a line of text positioned on a page.
+    
+    Attributes:
+        text: The text content of this line segment.
+        line_num_str: Formatted line number string for display.
+        source_line_num: The line number in the original source.
+        char_start: Starting character index in the source line.
+        char_end: Ending character index in the source line.
+        x: X-coordinate position on the page.
+        y: Y-coordinate position on the page.
+    """
     text: str
     line_num_str: str
     source_line_num: int
@@ -26,6 +44,16 @@ class PageLine:
 
 @dataclass
 class HighlightRect:
+    """Represents a highlight rectangle to be drawn on a page.
+    
+    Attributes:
+        x: X-coordinate of the rectangle's left edge.
+        y: Y-coordinate of the rectangle's bottom edge.
+        width: Width of the rectangle.
+        height: Height of the rectangle.
+        color: Color of the highlight (hex code or color name).
+        opacity: Opacity level (0.0 to 1.0).
+    """
     x: float
     y: float
     width: float
@@ -36,6 +64,14 @@ class HighlightRect:
 
 @dataclass
 class InlineAnnotation:
+    """Represents an inline annotation to be displayed on a page.
+    
+    Attributes:
+        text: The annotation text to display.
+        x: X-coordinate position of the annotation.
+        y: Y-coordinate position of the annotation.
+        color: Color of the annotation text.
+    """
     text: str
     x: float
     y: float
@@ -44,6 +80,18 @@ class InlineAnnotation:
 
 @dataclass
 class MarginComment:
+    """Represents a comment to be placed in the margin of a page.
+    
+    Attributes:
+        annotation: The source annotation object.
+        lines: The comment text wrapped into multiple lines.
+        height: Total height of the comment box.
+        target_y: Y-coordinate of the target location (where annotation points to).
+        target_x_end: X-coordinate of the end of the target text.
+        y_ideal: Ideal Y-coordinate for the comment placement.
+        y_top: Actual top Y-coordinate after positioning (default 0.0).
+        y_bottom: Actual bottom Y-coordinate after positioning (default 0.0).
+    """
     annotation: Annotation
     lines: list[str]
     height: float
@@ -56,6 +104,14 @@ class MarginComment:
 
 @dataclass
 class PageLayout:
+    """Represents the complete layout of a single page with all annotations.
+    
+    Attributes:
+        lines: List of text lines on this page.
+        highlights: List of highlight rectangles to draw.
+        inline_annotations: List of inline annotations.
+        margin_comments: List of margin comments.
+    """
     lines: list[PageLine]
     highlights: list[HighlightRect]
     inline_annotations: list[InlineAnnotation]
@@ -64,6 +120,14 @@ class PageLayout:
 
 @dataclass
 class RenderLayout:
+    """Represents the complete render layout with all pages and annotations.
+    
+    Attributes:
+        pages: List of all page layouts.
+        text_x: X-coordinate where text starts (after line numbers).
+        page_width: Width of each page.
+        page_height: Height of each page.
+    """
     pages: list[PageLayout]
     text_x: float
     page_width: float
@@ -71,6 +135,14 @@ class RenderLayout:
 
 
 def resolve_page_dimensions(settings: Settings) -> tuple[float, float]:
+    """Resolve page width and height based on page size and orientation settings.
+    
+    Args:
+        settings: The rendering settings containing page_size and orientation.
+    
+    Returns:
+        A tuple of (page_width, page_height) in points.
+    """
     base_size = A4 if settings.page_size == "A4" else letter
     if settings.orientation == "landscape":
         return base_size[1], base_size[0]
@@ -83,6 +155,17 @@ def line_number_column_width(
     font_size: int | float,
     show_line_numbers: bool,
 ) -> float:
+    """Calculate the width needed for the line number column.
+    
+    Args:
+        total_lines: Total number of lines in the source text.
+        font_name: Name of the font to use for measurements.
+        font_size: Size of the font in points.
+        show_line_numbers: Whether line numbers should be shown.
+    
+    Returns:
+        The width in points needed for the line number column, or 0 if line numbers are not shown.
+    """
     if not show_line_numbers:
         return 0
 
@@ -92,7 +175,19 @@ def line_number_column_width(
 
 
 def wrap_comment_text(text: str, font_name: str, font_size: int | float, max_width: int | float) -> list[str]:
-    """Wrap comment text to fit within max_width. Handles Japanese char-by-char wrapping."""
+    """Wrap comment text to fit within max_width.
+    
+    Handles word wrapping for regular text and character-by-character wrapping for CJK text.
+    
+    Args:
+        text: The comment text to wrap.
+        font_name: Name of the font to use for measurements.
+        font_size: Size of the font in points.
+        max_width: Maximum width in points before wrapping to next line.
+    
+    Returns:
+        A list of text lines, each fitting within max_width.
+    """
     words = text.split()
     if len(words) == 1 and any(ord(c) > 255 for c in text):
         lines = []
@@ -125,7 +220,17 @@ def wrap_comment_text(text: str, font_name: str, font_size: int | float, max_wid
 
 
 def wrap_line(line_text: str, font_name: str, font_size: int | float, max_text_width: int | float) -> list[Segment]:
-    """Wrap a single source line to fit max_text_width."""
+    """Wrap a single source line into segments that fit within max_text_width.
+    
+    Args:
+        line_text: The source line text to wrap.
+        font_name: Name of the font to use for measurements.
+        font_size: Size of the font in points.
+        max_text_width: Maximum width in points for each segment.
+    
+    Returns:
+        A list of Segment objects representing the wrapped text with character positions.
+    """
     segments: list[Segment] = []
     current_segment = ""
     current_width = 0
@@ -152,6 +257,17 @@ def _find_annotation_target(
     font_name: str,
     font_size: int | float,
 ) -> tuple[float, float] | None:
+    """Find the target position (y, x_end) for an annotation on the page.
+    
+    Args:
+        page_lines: List of lines on the current page.
+        ann: The annotation to find the target for.
+        font_name: Name of the font to use for measurements.
+        font_size: Size of the font in points.
+    
+    Returns:
+        A tuple of (y_coordinate, x_end_coordinate) if found, or None if annotation target is not on this page.
+    """
     target_line = ann.line
     target_start = ann.col_start - 1
     target_end = ann.col_end
@@ -181,6 +297,18 @@ def _build_margin_comments(
     font_size: int | float,
     box_width: float,
 ) -> list[MarginComment]:
+    """Build MarginComment objects from margin-positioned text annotations.
+    
+    Args:
+        page_lines: List of lines on the current page.
+        annotations: All annotations to consider.
+        font_name: Name of the font to use for measurements.
+        font_size: Size of the font in points.
+        box_width: Maximum width for comment boxes.
+    
+    Returns:
+        A list of MarginComment objects ready for positioning and rendering.
+    """
     comments_to_draw: list[MarginComment] = []
 
     for ann in annotations:
@@ -213,6 +341,16 @@ def _position_margin_comments(
     page_height: float,
     margin,
 ) -> None:
+    """Position margin comments to avoid overlaps and stay within page bounds.
+    
+    Arranges comments vertically, starting from the ideal positions and adjusting
+    to prevent overlaps while keeping them within the page margins.
+    
+    Args:
+        comments_to_draw: List of margin comments to position (modified in-place).
+        page_height: Height of the page in points.
+        margin: Margin settings object with top, bottom, left, right attributes.
+    """
     if not comments_to_draw:
         return
 
@@ -246,6 +384,22 @@ def _build_page_layout(
     page_height: float,
     text_x: float,
 ) -> PageLayout:
+    """Build the complete layout for a single page including all annotations.
+    
+    Args:
+        page_lines: List of text lines on this page.
+        annotations: All annotations to render.
+        settings: Rendering settings.
+        font_name: Name of the font to use for measurements.
+        font_size: Size of the font in points.
+        margin: Margin settings object.
+        page_width: Width of the page in points.
+        page_height: Height of the page in points.
+        text_x: X-coordinate where text starts.
+    
+    Returns:
+        A PageLayout object containing all elements to render on this page.
+    """
     highlights: list[HighlightRect] = []
     inline_annotations: list[InlineAnnotation] = []
 
@@ -320,6 +474,20 @@ def build_render_layout(
     config: RenderConfig,
     font_name: str,
 ) -> RenderLayout:
+    """Build the complete render layout from source text and annotations.
+    
+    This is the main layout building function that processes the source text,
+    wraps it across pages, and positions all annotations (highlights, inline
+    annotations, and margin comments).
+    
+    Args:
+        source_text: The source code text to render.
+        config: Rendering configuration containing settings and annotations.
+        font_name: Name of the font to use for measurements and rendering.
+    
+    Returns:
+        A RenderLayout object containing all pages and their annotations.
+    """
     source_text = source_text.replace("\t", "    ")
 
     settings = config.settings
