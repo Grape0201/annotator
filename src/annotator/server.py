@@ -29,10 +29,10 @@ def render_api(request: RenderRequest):
     try:
         config_data = yaml.safe_load(request.config_yaml) or {}
         config = RenderConfig.model_validate(config_data)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"YAML syntax error: {str(e)}")
     except ValidationError as exc:
         raise HTTPException(status_code=400, detail=f"Configuration validation failed: {exc}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"YAML syntax error: {str(e)}")
 
     
     # Create a temporary file to hold the output PDF
