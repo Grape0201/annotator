@@ -2,7 +2,7 @@ from reportlab.lib.colors import HexColor
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfgen import canvas
 
-from .config import Settings
+from .config import Settings, Margin
 from .layout import PageLayout, RenderLayout
 
 
@@ -28,7 +28,7 @@ def _draw_source_text(
     settings: Settings,
     font_name: str,
     font_size: int | float,
-    margin,
+    margin: Margin,
 ) -> None:
     c.setFont(font_name, font_size)
     c.setFillColor(HexColor("#333333"))
@@ -57,7 +57,7 @@ def _draw_margin_comments(
     font_name: str,
     font_size: int | float,
     page_width: float,
-    margin,
+    margin: Margin,
 ) -> None:
     box_width = margin.right - 30
     box_x = page_width - margin.right + 15
@@ -100,7 +100,7 @@ def _draw_header(
     settings: Settings,
     font_name: str,
     filename: str,
-    margin,
+    margin: Margin,
     page_width: float,
     page_height: float,
 ) -> None:
@@ -123,7 +123,7 @@ def _draw_footer(
     font_name: str,
     page_idx: int,
     total_pages: int,
-    margin,
+    margin: Margin,
     page_width: float,
 ) -> None:
     if not settings.show_page_numbers:
