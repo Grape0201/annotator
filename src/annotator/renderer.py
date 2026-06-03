@@ -6,6 +6,7 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import letter, A4
+from dataclasses import dataclass
 
 from .config import RenderConfig
 
@@ -27,6 +28,13 @@ def get_cache_dir():
     else:
         base = os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache'))
         return os.path.join(base, 'annotator')
+
+
+@dataclass
+class Segment:
+    text: str
+    char_start: int
+    char_end: int
 
 def ensure_font_loaded():
     """Ensure that the M PLUS 1 Code monospace CJK font is downloaded and registered."""
@@ -97,35 +105,30 @@ def wrap_comment_text(text: str, font_name: str, font_size: int | float, max_wid
             lines.append(current_line)
         return lines
 
-def wrap_line(line_text: str, font_name: str, font_size: int | float, max_text_width: int | float):
-    """Wrap a single source line to fit max_text_width."""
-    segments = []
+def wrap_line(line_text: str, font_name: str, font_size: int | float, max_text_width: int | float) -> list[Segment]:
+    """Wrap a single source line to fit max_text_width.
+
+    Returns a list of `Segment` objects.
+    """
+    segments: list[Segment] = []
     current_segment = ""
     current_width = 0
     char_start = 0
-    
+
     # Standard stringWidth check
     for idx, char in enumerate(line_text):
         char_width = pdfmetrics.stringWidth(char, font_name, font_size)
         if current_width + char_width > max_text_width and current_segment:
-            segments.append({
-                "text": current_segment,
-                "char_start": char_start,
-                "char_end": idx
-            })
+            segments.append(Segment(text=current_segment, char_start=char_start, char_end=idx))
             current_segment = char
             current_width = char_width
             char_start = idx
         else:
             current_segment += char
             current_width += char_width
-            
+
     # Always append the remainder
-    segments.append({
-        "text": current_segment,
-        "char_start": char_start,
-        "char_end": len(line_text)
-    })
+    segments.append(Segment(text=current_segment, char_start=char_start, char_end=len(line_text)))
     return segments
 
 def render_pdf(source_text: str, config: RenderConfig, output_path: str, filename: str = "source.txt"):
@@ -209,11 +212,11 @@ def render_pdf(source_text: str, config: RenderConfig, output_path: str, filenam
                 line_num_str = " " * (line_num_width_chars + 2) if show_line_numbers else ""
                 
             current_page_lines.append({
-                "text": seg["text"],
+                "text": seg.text,
                 "line_num_str": line_num_str,
                 "source_line_num": source_line_idx,
-                "char_start": seg["char_start"],
-                "char_end": seg["char_end"],
+                "char_start": seg.char_start,
+                "char_end": seg.char_end,
                 "x": text_x,
                 "y": current_y,
                 "inline_annotations": inline_anns if seg_idx == 0 else []
